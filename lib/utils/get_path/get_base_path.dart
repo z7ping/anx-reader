@@ -50,6 +50,7 @@ Future<String> getAnxDocumentsPath() async {
     case AnxPlatformEnum.windows:
       return (await getApplicationSupportDirectory()).path;
     case AnxPlatformEnum.macos:
+    case AnxPlatformEnum.linux:
       return (await getApplicationSupportDirectory()).path;
     case AnxPlatformEnum.ios:
       return (await getApplicationSupportDirectory()).path;

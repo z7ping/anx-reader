@@ -6,6 +6,7 @@ TextSelectionControls selectionControls() {
   switch (AnxPlatform.type) {
     case AnxPlatformEnum.ios:
     case AnxPlatformEnum.macos:
+    case AnxPlatformEnum.linux:
       return CupertinoTextSelectionControls();
     case AnxPlatformEnum.android:
     case AnxPlatformEnum.ohos:

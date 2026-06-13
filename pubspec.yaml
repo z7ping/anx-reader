@@ -151,6 +151,7 @@ dependency_overrides:
       url: https://github.com/Anxcye/langchain_dart.git
       ref: 310fb6b3
       path: packages/langchain_anthropic
+  googleai_dart: 3.0.0
 #  analyzer: ^8.0.0
 
 

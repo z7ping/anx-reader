@@ -9,6 +9,7 @@ Future<Directory> getAnxCacheDir() async {
     case AnxPlatformEnum.ohos:
     case AnxPlatformEnum.windows:
     case AnxPlatformEnum.macos:
+    case AnxPlatformEnum.linux:
     case AnxPlatformEnum.ios:
       return await getApplicationCacheDirectory();
   }

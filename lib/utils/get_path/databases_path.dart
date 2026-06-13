@@ -13,6 +13,7 @@ Future<String> getAnxDataBasesPath() async {
       return path;
     case AnxPlatformEnum.windows:
     case AnxPlatformEnum.macos:
+    case AnxPlatformEnum.linux:
     case AnxPlatformEnum.ios:
       final documentsPath = await getAnxDocumentsPath();
       return '$documentsPath${Platform.pathSeparator}databases';
