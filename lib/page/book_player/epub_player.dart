@@ -38,6 +38,7 @@ import 'package:anx_reader/utils/platform_utils.dart';
 import 'package:anx_reader/models/book_note.dart';
 import 'package:anx_reader/utils/log/common.dart';
 import 'package:anx_reader/utils/webView/gererate_url.dart';
+import 'package:anx_reader/utils/epub/linux_epub_reader.dart';
 import 'package:anx_reader/utils/webView/webview_console_message.dart';
 import 'package:anx_reader/widgets/bookshelf/book_cover.dart';
 import 'package:anx_reader/widgets/context_menu/context_menu.dart';
@@ -53,6 +54,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:icons_plus/icons_plus.dart';
 import 'package:pointer_interceptor/pointer_interceptor.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:anx_reader/utils/webView/linux_epub_webview.dart';
 
 import 'minute_clock.dart';
 
@@ -79,7 +81,7 @@ class EpubPlayer extends ConsumerStatefulWidget {
 
 class EpubPlayerState extends ConsumerState<EpubPlayer>
     with TickerProviderStateMixin {
-  late InAppWebViewController webViewController;
+  dynamic webViewController;
   late ContextMenu contextMenu;
   String cfi = '';
   double percentage = 0.0;
@@ -114,26 +116,31 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
       ModalRoute.of(context)?.isCurrent ?? false;
 
   void prevPage() {
+    if (webViewController == null) return;
     webViewController.evaluateJavascript(source: 'prevPage()');
   }
 
   void nextPage() {
+    if (webViewController == null) return;
     webViewController.evaluateJavascript(source: 'nextPage()');
   }
 
   void prevChapter() {
+    if (webViewController == null) return;
     webViewController.evaluateJavascript(source: '''
       prevSection()
       ''');
   }
 
   void nextChapter() {
+    if (webViewController == null) return;
     webViewController.evaluateJavascript(source: '''
       nextSection()
       ''');
   }
 
   void setTranslationMode(TranslationModeEnum mode) {
+    if (webViewController == null) return;
     webViewController.evaluateJavascript(source: '''
       if (typeof reader.view !== 'undefined' && reader.view.setTranslationMode) {
         reader.view.setTranslationMode('${mode.code}');
@@ -142,6 +149,7 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
   }
 
   Future<void> goToPercentage(double value) async {
+    if (webViewController == null) return;
     await webViewController.evaluateJavascript(source: '''
       goToPercent($value); 
       ''');
@@ -163,6 +171,7 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
     String bc = convertDartColorToJs(readTheme.backgroundColor);
     String tc = convertDartColorToJs(readTheme.textColor);
 
+    if (webViewController == null) return;
     webViewController.evaluateJavascript(source: '''
       changeStyle({
         backgroundColor: '#$bc',
@@ -181,6 +190,7 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
     styleTimer = Timer(const Duration(milliseconds: 300), () {
       if (!mounted) return;
       BookStyle style = bookStyle ?? Prefs().bookStyle;
+      if (webViewController == null) return;
       webViewController.evaluateJavascript(source: '''
       changeStyle({
         fontSize: ${style.fontSize},
@@ -212,6 +222,7 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
 
   void changeBgimgEffect() {
     if (!mounted) return;
+    if (webViewController == null) return;
     final bgimg = Prefs().bgimg;
     final bgimgUrl = bgimg.getEffectiveUrl(
       isDarkMode: isDarkMode,
@@ -228,6 +239,7 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
   }
 
   void changeReadingRules(ReadingRules readingRules) {
+    if (webViewController == null) return;
     webViewController.evaluateJavascript(source: '''
       readingFeatures({
         convertChineseMode: '${readingRules.convertChineseMode.name}',
@@ -237,6 +249,7 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
   }
 
   void changeFont(FontModel font) {
+    if (webViewController == null) return;
     webViewController.evaluateJavascript(source: '''
       changeStyle({
         fontName: '${font.name}',
@@ -246,6 +259,7 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
   }
 
   void changePageTurnStyle(PageTurn pageTurnStyle) {
+    if (webViewController == null) return;
     webViewController.evaluateJavascript(source: '''
       changeStyle({
         pageTurnStyle: '${pageTurnStyle.name}',
@@ -253,13 +267,18 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
     ''');
   }
 
-  void goToHref(String href) =>
-      webViewController.evaluateJavascript(source: "goToHref('$href')");
+  void goToHref(String href) {
+    if (webViewController == null) return;
+    webViewController.evaluateJavascript(source: "goToHref('$href')");
+  }
 
-  void goToCfi(String cfi) =>
-      webViewController.evaluateJavascript(source: "goToCfi('$cfi')");
+  void goToCfi(String cfi) {
+    if (webViewController == null) return;
+    webViewController.evaluateJavascript(source: "goToCfi('$cfi')");
+  }
 
   void addAnnotation(BookNote bookNote) {
+    if (webViewController == null) return;
     final noteContent =
         (bookNote.content).replaceAll('\n', ' ').replaceAll("'", "\\'");
     webViewController.evaluateJavascript(source: '''
@@ -274,6 +293,7 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
   }
 
   void addBookmark(BookmarkModel bookmark) {
+    if (webViewController == null) return;
     webViewController.evaluateJavascript(source: '''
       addAnnotation({
         id: ${bookmark.id},
@@ -286,13 +306,16 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
   }
 
   void addBookmarkHere() {
+    if (webViewController == null) return;
     webViewController.evaluateJavascript(source: '''
       addBookmarkHere()
       ''');
   }
 
-  void removeAnnotation(String cfi) =>
-      webViewController.evaluateJavascript(source: "removeAnnotation('$cfi')");
+  void removeAnnotation(String cfi) {
+    if (webViewController == null) return;
+    webViewController.evaluateJavascript(source: "removeAnnotation('$cfi')");
+  }
 
   void clearSearch() {
     ref.read(tocSearchProvider.notifier).clear();
@@ -307,6 +330,7 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
     }
     _clearSearchHighlights();
     ref.read(tocSearchProvider.notifier).start(sanitized);
+    if (webViewController == null) return;
     webViewController.evaluateJavascript(source: '''
       search('$sanitized', {
         'scope': 'book',
@@ -318,10 +342,12 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
   }
 
   void _clearSearchHighlights() {
+    if (webViewController == null) return;
     webViewController.evaluateJavascript(source: "clearSearch()");
   }
 
   Future<void> initTts({String? fromCfi}) async {
+    if (webViewController == null) return;
     if (fromCfi != null && fromCfi.isNotEmpty) {
       await webViewController.evaluateJavascript(
           source: "window.ttsFromCfi('$fromCfi')");
@@ -330,26 +356,43 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
     }
   }
 
-  void ttsStop() => webViewController.evaluateJavascript(source: "ttsStop()");
+  void ttsStop() {
+    if (webViewController == null) return;
+    webViewController.evaluateJavascript(source: "ttsStop()");
+  }
 
-  Future<String> ttsNext() async => (await webViewController
+  Future<String> ttsNext() async {
+    if (webViewController == null) return '';
+    return (await webViewController
           .callAsyncJavaScript(functionBody: "return await ttsNext()"))
       ?.value;
+  }
 
-  Future<String> ttsPrev() async => (await webViewController
+  Future<String> ttsPrev() async {
+    if (webViewController == null) return '';
+    return (await webViewController
           .callAsyncJavaScript(functionBody: "return await ttsPrev()"))
       ?.value;
+  }
 
-  Future<String> ttsPrevSection() async => (await webViewController
+  Future<String> ttsPrevSection() async {
+    if (webViewController == null) return '';
+    return (await webViewController
           .callAsyncJavaScript(functionBody: "return await ttsPrevSection()"))
       ?.value;
+  }
 
-  Future<String> ttsNextSection() async => (await webViewController
+  Future<String> ttsNextSection() async {
+    if (webViewController == null) return '';
+    return (await webViewController
           .callAsyncJavaScript(functionBody: "return await ttsNextSection()"))
       ?.value;
+  }
 
-  Future<String> ttsPrepare() async =>
-      (await webViewController.evaluateJavascript(source: "ttsPrepare()"));
+  Future<String> ttsPrepare() async {
+    if (webViewController == null) return '';
+    return (await webViewController.evaluateJavascript(source: "ttsPrepare()"));
+  }
 
   TtsSentence? _parseTtsSentence(dynamic value) {
     if (value is Map<dynamic, dynamic>) {
@@ -376,6 +419,7 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
   }
 
   Future<TtsSentence?> ttsCurrentDetail() async {
+    if (webViewController == null) return null;
     final result = await webViewController.callAsyncJavaScript(
       functionBody: 'return ttsCurrentDetail()',
     );
@@ -387,6 +431,7 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
     bool includeCurrent = false,
     int offset = 1,
   }) async {
+    if (webViewController == null) return [];
     final result = await webViewController.callAsyncJavaScript(
       functionBody:
           'return ttsCollectDetails($count, ${includeCurrent ? 'true' : 'false'}, $offset)',
@@ -395,35 +440,46 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
   }
 
   Future<void> ttsHighlightByCfi(String cfi) async {
+    if (webViewController == null) return;
     await webViewController.callAsyncJavaScript(
       functionBody: 'return ttsHighlightByCfi(${jsonEncode(cfi)})',
     );
   }
 
-  Future<bool> isFootNoteOpen() async => (await webViewController
+  Future<bool> isFootNoteOpen() async {
+    if (webViewController == null) return false;
+    return (await webViewController
       .evaluateJavascript(source: "window.isFootNoteOpen()"));
+  }
 
   void backHistory() {
+    if (webViewController == null) return;
     webViewController.evaluateJavascript(source: "back()");
   }
 
   void forwardHistory() {
+    if (webViewController == null) return;
     webViewController.evaluateJavascript(source: "forward()");
   }
 
   void refreshToc() {
+    if (webViewController == null) return;
     webViewController.evaluateJavascript(source: "refreshToc()");
   }
 
-  Future<String> theChapterContent() async =>
-      await webViewController.evaluateJavascript(
+  Future<String> theChapterContent() async {
+    if (webViewController == null) return '';
+    return await webViewController.evaluateJavascript(
         source: "theChapterContent()",
       );
+  }
 
-  Future<String> previousContent(int count) async =>
-      await webViewController.evaluateJavascript(
+  Future<String> previousContent(int count) async {
+    if (webViewController == null) return '';
+    return await webViewController.evaluateJavascript(
         source: "previousContent($count)",
       );
+  }
 
   Future<String> _getCurrentChapterContent({int? maxCharacters}) async {
     final raw = await theChapterContent();
@@ -437,7 +493,7 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
     if (href.isEmpty) {
       return '';
     }
-
+    if (webViewController == null) return '';
     final result = await webViewController.callAsyncJavaScript(
       functionBody:
           'return await getChapterContentByHref("${href.replaceAll('"', '\\"')}")',
@@ -597,7 +653,7 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
     }
   }
 
-  Future<void> renderAnnotations(InAppWebViewController controller) async {
+  Future<void> renderAnnotations(dynamic controller) async {
     List<BookNote> annotationList =
         await bookNoteDao.selectBookNotesByBookId(widget.book.id);
     String allAnnotations =
@@ -623,7 +679,7 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
     }
   }
 
-  Future<void> setHandler(InAppWebViewController controller) async {
+  Future<void> setHandler(dynamic controller) async {
     controller.addJavaScriptHandler(
         handlerName: 'onLoadEnd',
         callback: (args) {
@@ -891,6 +947,30 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
     Future.delayed(const Duration(milliseconds: 300), () {
       setTranslationMode(Prefs().getBookTranslationMode(widget.book.id));
     });
+  }
+
+  /// Called when Linux webkit2gtk webview is ready
+  Future<void> _onLinuxWebViewReady(LinuxWebViewController controller) async {
+    setHandler(controller);
+    _registerChapterContentBridge();
+
+    Future.delayed(const Duration(milliseconds: 300), () {
+      setTranslationMode(Prefs().getBookTranslationMode(widget.book.id));
+    });
+  }
+
+  /// Linux console message handler (wraps dynamic types)
+  void _linuxConsoleMessage(dynamic controller, dynamic message) {
+    try {
+      // message is JavaScriptConsoleMessage from webview_flutter_platform_interface
+      final String msg = message?.message?.toString() ?? '';
+      const ignoreMsg = [
+        'An iframe which has both allow-scripts and allow-same-origin for its sandbox attribute can escape its sandboxing',
+        'JavaScript execution returned a result of an unsupported type',
+      ];
+      if (ignoreMsg.contains(msg)) return;
+      AnxLog.info('Linux WebView Console: $msg');
+    } catch (_) {}
   }
 
   void removeOverlay() {
@@ -1210,6 +1290,38 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
 
   Widget buildWebviewWithIOSWorkaround(
       BuildContext context, String url, String initialCfi) {
+    // Linux: use native EPUB reader (no webkit2gtk to avoid GLX conflict)
+    if (AnxPlatform.isLinux) {
+      final initialHref = widget.cfi ?? widget.book.lastReadPosition;
+      return SizedBox.expand(
+        child: LinuxEpubReader(
+          book: widget.book,
+          initialHref: initialHref.isNotEmpty ? initialHref : null,
+          backgroundColor: backgroundColor != null
+              ? Color(int.parse('0xFF${backgroundColor!.substring(1)}'))
+              : null,
+          textColor: textColor != null
+              ? Color(int.parse('0xFF${textColor!.substring(1)}'))
+              : null,
+          onProgressChanged: (cfi, percentage, title, href, page, totalPages) {
+            setState(() {
+              this.cfi = cfi;
+              this.percentage = percentage;
+              chapterTitle = title;
+              chapterHref = href;
+              chapterCurrentPage = page;
+              chapterTotalPages = totalPages;
+            });
+            saveReadingProgress();
+          },
+          onLoadEnd: () {
+            widget.onLoadEnd();
+          },
+        ),
+      );
+    }
+
+    // Other platforms: use InAppWebView
     final webView = InAppWebView(
       webViewEnvironment: webViewEnvironment,
       initialUrlRequest: URLRequest(
