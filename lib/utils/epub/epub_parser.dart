@@ -96,14 +96,70 @@ class EpubParser {
     return null;
   }
 
+  /// Resolve a relative href against the chapter's directory.
+  String _resolveHref(String baseHref, String relativeHref) {
+    // Already absolute
+    if (relativeHref.startsWith('/')) return relativeHref.substring(1);
+
+    // Strip fragment identifier
+    final hashIdx = relativeHref.indexOf('#');
+    final cleanHref = hashIdx >= 0 ? relativeHref.substring(0, hashIdx) : relativeHref;
+    if (cleanHref.isEmpty) return '';
+
+    // Resolve relative to the base href's directory
+    final baseDir = baseHref.contains('/') ? baseHref.substring(0, baseHref.lastIndexOf('/') + 1) : _opfDir;
+    final parts = '$baseDir$cleanHref'.split('/');
+    final resolved = <String>[];
+    for (final part in parts) {
+      if (part == '..') {
+        if (resolved.isNotEmpty) resolved.removeLast();
+      } else if (part != '.' && part.isNotEmpty) {
+        resolved.add(part);
+      }
+    }
+    return resolved.join('/');
+  }
+
+  /// Read file content from archive as bytes, with caching.
+  List<int>? _readFileBytes(String path) {
+    final file = _findFileInArchive(path);
+    if (file == null) return null;
+    try {
+      return file.content as List<int>;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Convert image bytes to a base64 data URI.
+  String _bytesToDataUri(List<int> bytes, String mediaType) {
+    final b64 = base64Encode(bytes);
+    return 'data:$mediaType;base64,$b64';
+  }
+
+  /// Get the media type for a file extension.
+  String _mediaTypeForExt(String path) {
+    final ext = path.split('.').last.toLowerCase();
+    switch (ext) {
+      case 'png': return 'image/png';
+      case 'jpg': case 'jpeg': return 'image/jpeg';
+      case 'gif': return 'image/gif';
+      case 'svg': return 'image/svg+xml';
+      case 'webp': return 'image/webp';
+      case 'css': return 'text/css';
+      default: return 'application/octet-stream';
+    }
+  }
+
   /// Get the XHTML content of a chapter by spine index.
-  /// Returns HTML suitable for rendering.
+  /// Returns HTML suitable for flutter_html rendering.
   Future<String> getChapterHtml(int index) async {
     if (index < 0 || index >= _spine.length) return '';
     final item = _spine[index];
-    final fullPath = '$_opfDir${item.manifestItem.href}';
+    final chapterHref = item.manifestItem.href;
+    final fullPath = '$_opfDir$chapterHref';
     final file = _findFileInArchive(fullPath);
-    if (file == null) return '<p>Chapter not found: ${item.manifestItem.href}</p>';
+    if (file == null) return '<p>Chapter not found: $chapterHref</p>';
 
     try {
       final bytes = file.content as List<int>;
@@ -116,30 +172,78 @@ class EpubParser {
         content = utf8.decode(bytes, allowMalformed: true);
       }
 
-      // Try XML parsing to extract <body> content
+      // Extract and inline CSS <link> and <style> content
+      content = await _inlineCss(content, chapterHref);
+
+      // Resolve image src paths to base64 data URIs
+      content = _resolveImages(content, chapterHref);
+
+      // Extract body content
       try {
         final doc = XmlDocument.parse(content);
-        // Look for body element (with or without namespace)
-        final body = doc.findAllElements('body');
+        // Look for body element (any namespace)
+        final body = doc.descendants
+            .whereType<XmlElement>()
+            .where((el) => el.name.local == 'body');
         if (body.isNotEmpty) {
-          return body.first.innerXml;
+          final inner = body.first.innerXml;
+          if (inner.trim().isNotEmpty) return inner;
         }
-        // Try with namespace prefix
-        final allElements = doc.descendants.whereType<XmlElement>();
-        for (final el in allElements) {
-          if (el.name.local == 'body') {
-            return el.innerXml;
-          }
-        }
-        // Fallback: return the full document as string
+        // Fallback: return full document
         return doc.toXmlString();
       } on XmlException {
-        // Not valid XML — treat as raw HTML
+        // Not valid XML — return as-is (flutter_html can handle raw HTML)
         return content;
       }
     } catch (e) {
       return '<p>Error loading chapter: $e</p>';
     }
+  }
+
+  /// Inline CSS from <link> tags and <style> tags.
+  Future<String> _inlineCss(String html, String chapterHref) async {
+    // Use . to match either quote character
+    final linkPattern = RegExp(r'<link[^>]+rel=.stylesheet.[^>]*>', caseSensitive: false);
+    final hrefAttrPattern = RegExp(r'href=.([^"]*?)\.');
+    String result = html.replaceAllMapped(linkPattern, (match) {
+      final tag = match.group(0)!;
+      final hrefMatch = hrefAttrPattern.firstMatch(tag);
+      if (hrefMatch == null) return '';
+      final cssHref = _resolveHref(chapterHref, hrefMatch.group(1)!);
+      final cssBytes = _readFileBytes(cssHref);
+      if (cssBytes == null) return '';
+      final cssContent = utf8.decode(cssBytes, allowMalformed: true);
+      return '<style>$cssContent</style>';
+    });
+
+    return result;
+  }
+
+  /// Resolve image src attributes to base64 data URIs.
+  String _resolveImages(String html, String chapterHref) {
+    // Match <img ... src="..." ... > using . for quote char
+    final imgPattern = RegExp(r'<img([^>]*?)src=.([^"]+?)\.([^>]*?)', caseSensitive: false);
+    return html.replaceAllMapped(imgPattern, (match) {
+      final prefix = match.group(1) ?? '';
+      final src = match.group(2) ?? '';
+      final suffix = match.group(3) ?? '';
+
+      // Skip data URIs and http URLs
+      if (src.startsWith('data:') || src.startsWith('http://') || src.startsWith('https://')) {
+        return '<img$prefix src="$src"$suffix>';
+      }
+
+      // Resolve relative path
+      final resolvedPath = _resolveHref(chapterHref, src);
+      final bytes = _readFileBytes(resolvedPath);
+      if (bytes == null) {
+        return '<img$prefix src=""$suffix>';
+      }
+
+      final mediaType = _mediaTypeForExt(resolvedPath);
+      final dataUri = _bytesToDataUri(bytes, mediaType);
+      return '<img$prefix src="$dataUri"$suffix>';
+    });
   }
 
   /// Get chapter href (for tracking position).
@@ -158,7 +262,6 @@ class EpubParser {
         final content = utf8.decode(file.content as List<int>, allowMalformed: true);
         try {
           final doc = XmlDocument.parse(content);
-          // Look for <title> or first <h1>/<h2>
           final titleEl = doc.findAllElements('title');
           if (titleEl.isNotEmpty) return titleEl.first.innerText.trim();
           final h1 = doc.findAllElements('h1');
@@ -166,7 +269,6 @@ class EpubParser {
           final h2 = doc.findAllElements('h2');
           if (h2.isNotEmpty) return h2.first.innerText.trim();
         } on XmlException {
-          // Try regex extraction from raw HTML
           final titleMatch = RegExp(r'<title[^>]*>([^<]+)</title>', caseSensitive: false)
               .firstMatch(content);
           if (titleMatch != null) return titleMatch.group(1)!.trim();
@@ -176,14 +278,12 @@ class EpubParser {
         }
       }
     } catch (_) {}
-    // Fallback: try to get a nice title from the TOC/NCX
     return _getTocTitle(index) ?? getChapterHref(index);
   }
 
   /// Try to get title from NCX navigation document.
   String? _getTocTitle(int spineIndex) {
     try {
-      // Find NCX file from manifest
       for (final item in _manifest.values) {
         if (item.mediaType == 'application/x-dtbncx+xml') {
           final fullPath = '$_opfDir${item.href}';
@@ -191,9 +291,7 @@ class EpubParser {
           if (file == null) continue;
           final content = utf8.decode(file.content as List<int>, allowMalformed: true);
           final ncx = XmlDocument.parse(content);
-          // Get the href for this spine index
           final spineHref = getChapterHref(spineIndex);
-          // Search navPoints for matching src
           final navPoints = ncx.findAllElements('navPoint');
           for (final np in navPoints) {
             final contentEl = np.findAllElements('content').firstOrNull;
@@ -215,7 +313,6 @@ class EpubParser {
     for (int i = 0; i < _spine.length; i++) {
       if (_spine[i].manifestItem.href == href) return i;
     }
-    // Partial match
     for (int i = 0; i < _spine.length; i++) {
       if (_spine[i].manifestItem.href.contains(href) ||
           href.contains(_spine[i].manifestItem.href)) return i;
@@ -224,7 +321,6 @@ class EpubParser {
   }
 
   /// Extract an image from the EPUB as bytes.
-  /// [href] is the path relative to the OPF directory.
   List<int>? getImage(String href) {
     final fullPath = '$_opfDir$href';
     final file = _findFileInArchive(fullPath);

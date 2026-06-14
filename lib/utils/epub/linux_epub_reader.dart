@@ -96,17 +96,13 @@ class _LinuxEpubReaderState extends State<LinuxEpubReader> {
     final rawHtml = await _parser!.getChapterHtml(index);
     debugPrint('[LinuxEpubReader] Chapter $index: ${rawHtml.length} chars');
 
-    // Clean HTML: strip XML namespace prefixes that confuse flutter_html
+    // Minimal cleanup: remove XML declaration and namespace declarations
     String cleaned = rawHtml
+        .replaceFirst(RegExp(r'<\?xml[^?]*\?>\s*'), '')
         .replaceAll(RegExp(r'xmlns[=:]"[^"]*"'), '')
-        .replaceAllMapped(RegExp(r'</?[a-zA-Z]+:'), (Match m) => m.group(0)!.contains('/') ? '</' : '<')
-        .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
 
-    // Extract plain text as fallback
     _currentPlainText = _extractPlainText(cleaned);
-
-    // Prepare HTML for flutter_html
     _currentHtml = cleaned;
 
     if (mounted) {
@@ -182,44 +178,28 @@ class _LinuxEpubReaderState extends State<LinuxEpubReader> {
         return Html(
           data: _currentHtml,
           style: {
-            'body': Style(
+            '*': Style(
               color: fgColor,
               fontSize: FontSize(18),
               lineHeight: LineHeight(1.8),
             ),
             'p': Style(
-              color: fgColor,
-              fontSize: FontSize(18),
               margin: Margins.only(bottom: 12),
             ),
-            'div': Style(
-              color: fgColor,
-              fontSize: FontSize(18),
-              lineHeight: LineHeight(1.8),
-            ),
             'h1': Style(
-              color: fgColor,
               fontSize: FontSize(28),
               fontWeight: FontWeight.bold,
             ),
             'h2': Style(
-              color: fgColor,
               fontSize: FontSize(24),
               fontWeight: FontWeight.bold,
             ),
             'h3': Style(
-              color: fgColor,
               fontSize: FontSize(20),
               fontWeight: FontWeight.bold,
             ),
-            'h4': Style(
-              color: fgColor,
-              fontSize: FontSize(18),
-              fontWeight: FontWeight.bold,
-            ),
-            'span': Style(color: fgColor),
-            'a': Style(
-              color: Theme.of(context).colorScheme.primary,
+            'img': Style(
+              width: Width(100, Unit.percent),
             ),
           },
         );
@@ -230,7 +210,6 @@ class _LinuxEpubReaderState extends State<LinuxEpubReader> {
       }
     }
 
-    // Fallback: plain text
     return _buildPlainText(fgColor);
   }
 
