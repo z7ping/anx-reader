@@ -96,7 +96,7 @@ class _LinuxEpubReaderState extends State<LinuxEpubReader> {
     final rawHtml = await _parser!.getChapterHtml(index);
     debugPrint('[LinuxEpubReader] Chapter $index: ${rawHtml.length} chars');
 
-    // Minimal cleanup: remove XML declaration and namespace declarations
+    // Minimal cleanup
     String cleaned = rawHtml
         .replaceFirst(RegExp(r'<\?xml[^?]*\?>\s*'), '')
         .replaceAll(RegExp(r'xmlns[=:]"[^"]*"'), '')
@@ -116,7 +116,6 @@ class _LinuxEpubReaderState extends State<LinuxEpubReader> {
     _reportProgress();
   }
 
-  /// Extract plain text from HTML by stripping tags
   String _extractPlainText(String html) {
     return html
         .replaceAll(RegExp(r'<[^>]+>'), ' ')
@@ -172,11 +171,11 @@ class _LinuxEpubReaderState extends State<LinuxEpubReader> {
   Widget _buildContent() {
     final fgColor = widget.textColor ?? Colors.black87;
 
-    // Try HTML rendering first
     if (_useHtml && _currentHtml.isNotEmpty) {
       try {
         return Html(
           data: _currentHtml,
+          shrinkWrap: true,
           style: {
             '*': Style(
               color: fgColor,
@@ -297,15 +296,13 @@ class _LinuxEpubReaderState extends State<LinuxEpubReader> {
             ),
           ),
           const Divider(height: 1),
-          // Chapter content
+          // Chapter content — use SingleChildScrollView instead of ListView
+          // to prevent flutter_html from re-rendering on every scroll frame
           Expanded(
-            child: ListView.builder(
+            child: SingleChildScrollView(
               controller: _scrollController,
               padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-              itemCount: 1,
-              itemBuilder: (context, index) {
-                return _buildContent();
-              },
+              child: _buildContent(),
             ),
           ),
           // Bottom navigation bar
